@@ -1,6 +1,10 @@
+import { config } from 'dotenv';
 import axios from 'axios';
+
+config();
 // The API endpoint of your server
-const LOG_SERVER_ENDPOINT = 'http://localhost:3000/tests';
+
+const LOG_SERVER_ENDPOINT = process.env.LOG_SERVER_ENDPOINT || 'http://localhost:3000/tests';
 
 /**
  * Posts the test results to the log server using Axios.
