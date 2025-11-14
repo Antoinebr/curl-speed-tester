@@ -3,8 +3,8 @@ import { promises as fs } from 'fs';
 import { URL } from 'url';
 import path from 'path'; // Using path for cross-platform file saving
 import { url } from 'inspector';
-import { uploadToS3 } from './s3uploader.js';
-import { postResultsToLogServer } from './logServer.js';
+import { uploadToS3 } from  './s3_uploader.js';
+import { postResultsToLogServer } from './log_server.js';
 import {readFileSync} from "fs";
 
 // --- Configuration ---
