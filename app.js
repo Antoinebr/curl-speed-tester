@@ -5,18 +5,27 @@ import path from 'path'; // Using path for cross-platform file saving
 import { url } from 'inspector';
 import { uploadToS3 } from './s3uploader.js';
 import { postResultsToLogServer } from './logServer.js';
+import {readFileSync} from "fs";
 
 // --- Configuration ---
 
 // Add all the URLs you want to test in this array
-const URLS_TO_TEST = [
+// const URLS_TO_TEST = [
 
-    {
-        url: 'https://speed.fastly.antoinee.xyz/throughput/socket.jpg',//'https://speed.fastly.antoinee.xyz/throughput/OUT-1G-random.bin',
-        //ipToConnect: '151.101.23.52',
-    }
+//     {
+//         url: 'https://speed.fastly.antoinee.xyz/throughput/socket.jpg',//'https://speed.fastly.antoinee.xyz/throughput/OUT-1G-random.bin',
+//         //ipToConnect: '151.101.23.52',
+//     }
 
-];
+// ];
+
+const URLS_TO_TEST = readFileSync('urlsToTest.txt', 'utf-8')
+    .split('\n')
+    .filter(line => line.trim() !== '')
+    .map(url => ({ url: url.trim() }));
+
+
+  
 
 const LOG_DIRECTORY = './curl_logs'; // Directory to store log files
 
@@ -49,14 +58,15 @@ function createLogFileName(urlStr) {
  * @returns {object | null} - An object {key, value} or null.
  */
 function parseHeader(line) {
+  
   const lowerLine = line.toLowerCase().replace('< ', '');
   
-  console.log(line);
   if (lowerLine.startsWith('x-served-by:')) {
     return { key: 'xServedBy', value: line.substring(13).trim() };
   }
   if (lowerLine.startsWith('x-cache:')) {
-    return { key: 'xCache', value: line.substring(8).trim() };
+
+    return { key: 'xCache', value: line.substring(10).trim() };
   }
   if (lowerLine.startsWith('date:')) {
     return { key: 'date', value: line.substring(5).trim() };
@@ -138,6 +148,8 @@ function executeCurl(url) {
  * Main function to run all tests.
  */
 async function runAllTests() {
+
+
   console.log(`Starting curl speed tests for ${URLS_TO_TEST.length} URL(s)...`);
   console.log(`Logs will be saved in: ${LOG_DIRECTORY}\n`);
   
@@ -191,6 +203,9 @@ async function runAllTests() {
         console.log(`  Posting results to log server...`);
         await postResultsToLogServer({
           url: url.url,
+          curl_command : process.env.curl_command.replace('URL_GOES_HERE', url.url) || "N/A",
+          location: process.env.location || "N/A",
+          machine_type: process.env.machine_type || "N/A",
           test_date: results.date,
           speed: results.speed,
           x_cache: results.xCache,
