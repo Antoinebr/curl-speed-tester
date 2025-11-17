@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { postResultsToLogServer } from './log_server.js';
+import {parseHeader} from "./utils.js";
 
 /**
  * Executes a single curl command optimized for parallel stats.
@@ -59,6 +60,64 @@ function executeCurlForParallelStats(url) {
 }
 
 
+/**
+ * Executes the curl command for a single URL HEAD request to see  which pop it hits.
+ * @param {string} url - The URL to test.
+ * @returns {Promise<object>} - A promise that resolves with the test results.
+ */
+function executeCurlHead(url) {
+  return new Promise((resolve, reject) => {
+    
+    // Arguments for curl HEAD request
+    const curlArgs = [
+      '-I',                        // HEAD request
+      url, 
+      '-v'                         // Verbose output to stderr
+    ];
+
+    let fullLog = ''; // We will capture *all* output here
+    
+    // Spawn the curl process
+    const curl = spawn('curl', curlArgs);
+
+    // curl's -v output (verbose) goes to stderr
+    curl.stderr.on('data', (data) => {
+      const dataStr = data.toString();
+      fullLog += dataStr; // Add to full log
+    });
+
+    // Handle process error (e.g., command not found)
+    curl.on('error', (err) => {
+      reject(err);
+    });
+
+    // When the process finishes
+    curl.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`curl process exited with code ${code}.\nLog:\n${fullLog}`));
+        return;
+      }
+
+       // Now that we have the full log, parse it
+        const results = {
+            xServedBy: '',
+            xCache: '',
+            date: ''
+        };
+
+        const lines = fullLog.split('\n'); 
+        for (const line of lines) {
+            const header = parseHeader(line);
+            if (header) {
+                results[header.key] = header.value;
+            }
+        }
+
+      resolve({ results });
+    });
+  });
+}
+
 
 /**
  * Runs a parallel throughput test.
@@ -102,6 +161,12 @@ export async function runParallelTest(url, numConnections = 32) {
         console.log(`  Total Test Time (Max): ${maxTime.toFixed(4)} s`);
         console.log(`  AGGREGATE THROUGHPUT: ${throughput_gbps.toFixed(2)} Gbps`);
 
+
+        const headResults = await executeCurlHead(url);
+
+        console.log(headResults.results);
+     
+
         // --- Post this aggregate result to your server ---
         // We adapt the data object for this new test type
         console.log(`  Posting aggregate results to log server...`);
@@ -111,7 +176,9 @@ export async function runParallelTest(url, numConnections = 32) {
             location: process.env.location || "N/A",
             machine_type: process.env.machine_type || "N/A",
             test_date: new Date().toISOString(), // Use current time
-            speed: throughput_gbps.toFixed(2) // We store the Gbps value in the 'speed' field
+            speed: throughput_gbps.toFixed(2), // We store the Gbps value in the 'speed' field
+            x_cache: headResults.results.xCache || 'N/A',
+            x_served_by: headResults.results.xServedBy || 'N/A'
         });
 
     } catch (error) {
