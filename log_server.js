@@ -4,17 +4,17 @@ import axios from 'axios';
 config();
 // The API endpoint of your server
 
-const LOG_SERVER_ENDPOINT = process.env.LOG_SERVER_ENDPOINT || 'http://localhost:3000/tests';
+const LOG_SERVER_ENDPOINT = process.env.LOG_SERVER_ENDPOINT || 'http://localhost:3000';
 
 /**
  * Posts the test results to the log server using Axios.
  * * @param {object} data - The data object to send to the server.
  * Expected format: { url, test_date, speed, x_cache, x_served_by, s3_log_key }
  */
-async function postResultsToLogServer(data) {
+async function postResultsToLogServer(endpoint = '/tests',data) {
   try {
     // Make the POST request
-    const response = await axios.post(LOG_SERVER_ENDPOINT, data, {
+    const response = await axios.post(LOG_SERVER_ENDPOINT+endpoint, data, {
       headers: { 'Content-Type': 'application/json' }
     });
 
