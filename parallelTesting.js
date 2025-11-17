@@ -1,6 +1,12 @@
-import { spawn } from 'child_process';
-import { postResultsToLogServer } from './log_server.js';
-import {parseHeader} from "./utils.js";
+import {
+    spawn
+} from 'child_process';
+import {
+    postResultsToLogServer
+} from './log_server.js';
+import {
+    parseHeader
+} from "./utils.js";
 
 /**
  * Executes a single curl command optimized for parallel stats.
@@ -9,7 +15,7 @@ import {parseHeader} from "./utils.js";
 function executeCurlForParallelStats(url) {
     return new Promise((resolve, reject) => {
 
-    
+
         // We get size_download and time_total, separated by a colon.
         // -s (silent) is added to suppress progress, we only want the final output.
         const curlArgs = [
@@ -66,56 +72,58 @@ function executeCurlForParallelStats(url) {
  * @returns {Promise<object>} - A promise that resolves with the test results.
  */
 function executeCurlHead(url) {
-  return new Promise((resolve, reject) => {
-    
-    // Arguments for curl HEAD request
-    const curlArgs = [
-      '-I',                        // HEAD request
-      url, 
-      '-v'                         // Verbose output to stderr
-    ];
+    return new Promise((resolve, reject) => {
 
-    let fullLog = ''; // We will capture *all* output here
-    
-    // Spawn the curl process
-    const curl = spawn('curl', curlArgs);
+        // Arguments for curl HEAD request
+        const curlArgs = [
+            '-I', // HEAD request
+            url,
+            '-v' // Verbose output to stderr
+        ];
 
-    // curl's -v output (verbose) goes to stderr
-    curl.stderr.on('data', (data) => {
-      const dataStr = data.toString();
-      fullLog += dataStr; // Add to full log
-    });
+        let fullLog = ''; // We will capture *all* output here
 
-    // Handle process error (e.g., command not found)
-    curl.on('error', (err) => {
-      reject(err);
-    });
+        // Spawn the curl process
+        const curl = spawn('curl', curlArgs);
 
-    // When the process finishes
-    curl.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`curl process exited with code ${code}.\nLog:\n${fullLog}`));
-        return;
-      }
+        // curl's -v output (verbose) goes to stderr
+        curl.stderr.on('data', (data) => {
+            const dataStr = data.toString();
+            fullLog += dataStr; // Add to full log
+        });
 
-       // Now that we have the full log, parse it
-        const results = {
-            xServedBy: '',
-            xCache: '',
-            date: ''
-        };
+        // Handle process error (e.g., command not found)
+        curl.on('error', (err) => {
+            reject(err);
+        });
 
-        const lines = fullLog.split('\n'); 
-        for (const line of lines) {
-            const header = parseHeader(line);
-            if (header) {
-                results[header.key] = header.value;
+        // When the process finishes
+        curl.on('close', (code) => {
+            if (code !== 0) {
+                reject(new Error(`curl process exited with code ${code}.\nLog:\n${fullLog}`));
+                return;
             }
-        }
 
-      resolve({ results });
+            // Now that we have the full log, parse it
+            const results = {
+                xServedBy: '',
+                xCache: '',
+                date: ''
+            };
+
+            const lines = fullLog.split('\n');
+            for (const line of lines) {
+                const header = parseHeader(line);
+                if (header) {
+                    results[header.key] = header.value;
+                }
+            }
+
+            resolve({
+                results
+            });
+        });
     });
-  });
 }
 
 
@@ -135,8 +143,45 @@ export async function runParallelTest(url, numConnections = 32) {
 
     try {
         // Wait for ALL 32 curl commands to finish
+
+
+        // Example of allResults:        // [
+        //   { bytes: 1390017, time: 0.117722 },
+        //   { bytes: 1390017, time: 0.114583 },
+        //   { bytes: 1390017, time: 0.397259 },
+        //   { bytes: 1390017, time: 0.441065 },
+        //   { bytes: 1390017, time: 0.240306 },
+        //   { bytes: 1390017, time: 0.325351 },
+        //   { bytes: 1390017, time: 0.411385 },
+        //   { bytes: 1390017, time: 0.103668 },
+        //   { bytes: 1390017, time: 0.350297 },
+        //   { bytes: 1390017, time: 0.307825 },
+        //   { bytes: 1390017, time: 0.310147 },
+        //   { bytes: 1390017, time: 0.216704 },
+        //   { bytes: 1390017, time: 0.560536 },
+        //   { bytes: 1390017, time: 0.326996 },
+        //   { bytes: 1390017, time: 0.312245 },
+        //   { bytes: 1390017, time: 0.330499 },
+        //   { bytes: 1390017, time: 0.404883 },
+        //   { bytes: 1390017, time: 0.312347 },
+        //   { bytes: 1390017, time: 0.340271 },
+        //   { bytes: 1390017, time: 0.318742 },
+        //   { bytes: 1390017, time: 0.344626 },
+        //   { bytes: 1390017, time: 0.310839 },
+        //   { bytes: 1390017, time: 0.350576 },
+        //   { bytes: 1390017, time: 0.308157 },
+        //   { bytes: 1390017, time: 0.313467 },
+        //   { bytes: 1390017, time: 0.303462 },
+        //   { bytes: 1390017, time: 0.333498 },
+        //   { bytes: 1390017, time: 0.30791 },
+        //   { bytes: 1390017, time: 0.245403 },
+        //   { bytes: 1390017, time: 0.365188 },
+        //   { bytes: 1390017, time: 0.34834 },
+        //   { bytes: 1390017, time: 0.363915 }
+        // ]
         const allResults = await Promise.all(promises);
 
+    
         // --- Aggregation Logic ---
         let totalBytes = 0;
         let maxTime = 0;
@@ -165,10 +210,8 @@ export async function runParallelTest(url, numConnections = 32) {
         const headResults = await executeCurlHead(url);
 
         console.log(headResults.results);
-     
 
-        // --- Post this aggregate result to your server ---
-        // We adapt the data object for this new test type
+
         console.log(`  Posting aggregate results to log server...`);
         await postResultsToLogServer('/parallel_tests', {
             url: url,
@@ -187,6 +230,3 @@ export async function runParallelTest(url, numConnections = 32) {
         console.log('-----------------------------------\n');
     }
 }
-
-
-

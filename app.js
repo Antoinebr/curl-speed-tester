@@ -7,18 +7,11 @@ import { uploadToS3 } from  './s3_uploader.js';
 import { postResultsToLogServer } from './log_server.js';
 import {readFileSync} from "fs";
 import { runParallelTest } from './parallelTesting.js';
-import { parseHeader } from './utils.js';
+import { executeCurl } from './singleTesting.js';
+import { parseHeader,createLogFileName } from './utils.js';
 // --- Configuration ---
 
-// Add all the URLs you want to test in this array
-// const URLS_TO_TEST = [
-
-//     {
-//         url: 'https://speed.fastly.antoinee.xyz/throughput/socket.jpg',//'https://speed.fastly.antoinee.xyz/throughput/OUT-1G-random.bin',
-//         //ipToConnect: '151.101.23.52',
-//     }
-
-// ];
+const LOG_DIRECTORY = './curl_logs'; // Directory to store log files
 
 const URLS_TO_TEST = readFileSync('urlsToTest.txt', 'utf-8')
     .split('\n')
@@ -32,100 +25,7 @@ const URLS_TO_PARALLEL_TEST = readFileSync('urlsToParalleTest.txt', 'utf-8')
     .map(url => ({ url: url.trim() }));
   
 
-const LOG_DIRECTORY = './curl_logs'; // Directory to store log files
 
-// --- Helper Functions ---
-
-/**
- * Creates a file-friendly name from a URL and a timestamp.
- * e.g., 'https://.../file.140gb?bs=10' -> 'file.140gb_2025-11-13T15-00-00.log'
- */
-function createLogFileName(urlStr) {
-  const url = new URL(urlStr);
-  // Get pathname and remove leading slash
-  const pathPart = url.pathname.substring(1); 
-  
-  // Basic sanitization
-  const friendlyName = pathPart.replace(/[^a-z0-9._-]/gi, '_') || 'download';
-  
-  // Create a clean timestamp (ISO string, replacing colons)
-  const timestamp = new Date().toISOString()
-    .replace(/:/g, '-') // Replace colons to be file-name safe
-    .substring(0, 19);  // Truncate milliseconds (e.g., ...T15-00-00)
-
-  return `${friendlyName}_${timestamp}.log`;
-}
-
-
-/**
- * Executes the curl command for a single URL.
- * @param {string} url - The URL to test.
- * @returns {Promise<object>} - A promise that resolves with the test results.
- */
-function executeCurl(url) {
-  return new Promise((resolve, reject) => {
-    
-    // Arguments for curl
-    const curlArgs = [
-      '-w', '%{speed_download}\n', // Write speed to stdout
-      '-o', '/dev/null',           // Send file download to null
-      url.url, 
-      // '--connect-to', url.ipToConnect,    
-      '-v'                         // Verbose output to stderr
-    ];
-
-    let speed = '';
-    let fullLog = ''; // We will capture *all* output here
-    
-    // Spawn the curl process
-    const curl = spawn('curl', curlArgs);
-
-    // curl's -w output (speed) goes to stdout
-    curl.stdout.on('data', (data) => {
-      const dataStr = data.toString();
-      speed += dataStr; // Capture speed
-      fullLog += dataStr; // Add to full log
-    });
-
-    // curl's -v output (verbose) goes to stderr
-    curl.stderr.on('data', (data) => {
-      const dataStr = data.toString();
-      fullLog += dataStr; // Add to full log
-    });
-
-    // Handle process error (e.g., command not found)
-    curl.on('error', (err) => {
-      reject(err);
-    });
-
-    // When the process finishes
-    curl.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`curl process exited with code ${code}.\nLog:\n${fullLog}`));
-        return;
-      }
-      
-      // Now that we have the full log, parse it
-      const results = {
-        speed: speed.trim(), // The speed from stdout
-        xServedBy: '',
-        xCache: '',
-        date: '',
-        fullLog: fullLog
-      };
-
-      const lines = fullLog.split('\n');
-      for (const line of lines) {
-        const header = parseHeader(line);
-        if (header) {
-          results[header.key] = header.value;
-        }
-      }
-
-      resolve(results);
-    });
-  });
-}
 
 /**
  * Main function to run all tests.
@@ -216,9 +116,6 @@ async function runAllTests() {
           console.error(`  Failed to post results to log server: ${error}`);
         }
 
-
-
-
       } catch (error) {
         console.error(`  Failed to test ${url.url}:`, error.message);
       } finally {
@@ -230,5 +127,5 @@ async function runAllTests() {
   console.log('All tests finished.');
 }
 
-// --- Run the script ---
+//  Run the script
 runAllTests();
